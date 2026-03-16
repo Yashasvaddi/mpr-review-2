@@ -1,22 +1,38 @@
 <!DOCTYPE html>
 <html>
 
+<head>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+</head>
+
 <body>
 
 <center>
 
-<h2>Browser LLM (WebGPU)</h2>
+<h2>Browser RAG Demo (WebGPU)</h2>
 
-<p>Enter your prompt:</p>
+<p>Upload a document:</p>
+
+<input type="file" id="file">
+<button onclick="processFile()">Load Document</button>
+
+<br><br>
+
+<p>Ask a question:</p>
 
 <input id="text" size="60" value="Explain machine learning">
 <br><br>
 
-<button onclick="run()">Generate</button>
+<button onclick="run()">Generate Answer</button>
 
 <br><br>
 
 <pre id="output">Initializing...</pre>
+
+<h3>Document Chunks</h3>
+<div id="chunks" style="width:80%;text-align:left;"></div>
 
 </center>
 
@@ -26,6 +42,7 @@ import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 
 let engine;
 let ready = false;
+let chunks = [];
 
 async function init() {
 
@@ -37,18 +54,138 @@ async function init() {
 
     engine = new webllm.MLCEngine();
 
-    await engine.reload("Qwen2-0.5B-Instruct-q4f16_1-MLC");
+    await engine.reload("Llama-3.2-1B-Instruct-q4f16_1-MLC");
 
     ready = true;
 
-    output.innerText = "Model ready";
+    output.innerText = "Model ready. Upload a document.";
 
   } catch (err) {
 
-    console.error(err);
-    output.innerText = "Error loading model: " + err.message;
+    output.innerText = err.message;
 
   }
+
+}
+
+function renderChunks(highlight = []) {
+
+  const container = document.getElementById("chunks");
+  container.innerHTML = "";
+
+  chunks.forEach((c, i) => {
+
+    const div = document.createElement("div");
+
+    div.style.border = "1px solid #ccc";
+    div.style.padding = "10px";
+    div.style.marginBottom = "8px";
+    div.style.background = highlight.includes(i) ? "#ffeeba" : "#f7f7f7";
+
+    div.innerHTML = "<b>Chunk " + i + "</b><br>" + c;
+
+    container.appendChild(div);
+
+  });
+
+}
+
+async function extractPDF(file) {
+
+  const buffer = await file.arrayBuffer();
+
+  const pdf = await pdfjsLib.getDocument({data: buffer}).promise;
+
+  let text = "";
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+
+    const page = await pdf.getPage(i);
+
+    const content = await page.getTextContent();
+
+    const strings = content.items.map(item => item.str);
+
+    text += strings.join(" ") + "\n";
+
+  }
+
+  return text;
+
+}
+
+window.processFile = async function () {
+
+  const file = document.getElementById("file").files[0];
+
+  if (!file) {
+    alert("Upload a file");
+    return;
+  }
+
+  let text = "";
+
+  if (file.type === "application/pdf") {
+
+    document.getElementById("output").innerText = "Parsing PDF...";
+
+    text = await extractPDF(file);
+
+  } else {
+
+    text = await file.text();
+
+  }
+
+  const size = 500;
+  const overlap = 100;
+
+  chunks = [];
+
+  for (let i = 0; i < text.length; i += size - overlap) {
+
+    chunks.push(text.slice(i, i + size));
+
+  }
+
+  document.getElementById("output").innerText =
+    "Document loaded. Chunks: " + chunks.length;
+
+  renderChunks();
+
+}
+
+function retrieve(query, k = 3) {
+
+  const words = query.toLowerCase().split(" ");
+
+  const scored = chunks.map((c, index) => {
+
+    const text = c.toLowerCase();
+
+    let score = 0;
+
+    words.forEach(w => {
+
+      if (text.includes(w)) score++;
+
+    });
+
+    return {chunk: c, score, index};
+
+  });
+
+  scored.sort((a,b)=>b.score-a.score);
+
+  const results = scored.slice(0,k);
+
+  return {
+
+    chunks: results.map(x=>x.chunk),
+    indexes: results.map(x=>x.index)
+
+  };
+
 }
 
 window.run = async function () {
@@ -60,27 +197,39 @@ window.run = async function () {
     return;
   }
 
-  try {
-
-    const prompt = document.getElementById("text").value;
-
-    console.log("Prompt:", prompt);
-
-    const reply = await engine.chat.completions.create({
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.7
-    });
-
-    output.innerText = reply.choices[0].message.content;
-
-  } catch (err) {
-
-    console.error(err);
-    output.innerText = "Generation error: " + err.message;
-
+  if (chunks.length === 0) {
+    output.innerText = "Upload a document first.";
+    return;
   }
 
-};
+  const prompt = document.getElementById("text").value;
+
+  const retrieval = retrieve(prompt,3);
+
+  renderChunks(retrieval.indexes);
+
+  const context = retrieval.chunks.join("\n\n");
+
+  const ragPrompt =
+
+`Answer using the context below.
+
+Context:
+${context}
+
+Question:
+${prompt}`;
+
+  const reply = await engine.chat.completions.create({
+
+    messages: [{ role: "user", content: ragPrompt }],
+    temperature: 0.7
+
+  });
+
+  output.innerText = reply.choices[0].message.content;
+
+}
 
 init();
 
