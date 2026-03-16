@@ -1,3 +1,25 @@
+<!DOCTYPE html>
+<html>
+
+<body>
+
+<center>
+
+<h2>Browser LLM (WebGPU)</h2>
+
+<p>Enter your prompt:</p>
+
+<input id="text" size="60" value="Explain machine learning">
+<br><br>
+
+<button onclick="run()">Generate</button>
+
+<br><br>
+
+<pre id="output">Initializing...</pre>
+
+</center>
+
 <script type="module">
 
 import * as webllm from "https://esm.run/@mlc-ai/web-llm";
@@ -7,35 +29,62 @@ let ready = false;
 
 async function init() {
 
-  document.getElementById("output").innerText = "Loading model...";
+  const output = document.getElementById("output");
 
-  engine = new webllm.MLCEngine();
+  try {
 
-  await engine.reload("Qwen2-0.5B-Instruct-q4f16_1-MLC");
+    output.innerText = "Loading model...";
 
-  ready = true;
+    engine = new webllm.MLCEngine();
 
-  document.getElementById("output").innerText = "Model ready";
+    await engine.reload("Qwen2-0.5B-Instruct-q4f16_1-MLC");
+
+    ready = true;
+
+    output.innerText = "Model ready";
+
+  } catch (err) {
+
+    console.error(err);
+    output.innerText = "Error loading model: " + err.message;
+
+  }
 }
 
 window.run = async function () {
 
+  const output = document.getElementById("output");
+
   if (!ready) {
-    document.getElementById("output").innerText = "Model still loading...";
+    output.innerText = "Model still loading...";
     return;
   }
 
-  const prompt = document.getElementById("text").value;
-  console.log("Prompt:", prompt);
-  const reply = await engine.chat.completions.create({
-    messages: [{ role: "user", content: prompt }],
-    temperature: 0.7
-  });
+  try {
 
-  document.getElementById("output").innerText =
-    reply.choices[0].message.content;
+    const prompt = document.getElementById("text").value;
+
+    console.log("Prompt:", prompt);
+
+    const reply = await engine.chat.completions.create({
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.7
+    });
+
+    output.innerText = reply.choices[0].message.content;
+
+  } catch (err) {
+
+    console.error(err);
+    output.innerText = "Generation error: " + err.message;
+
+  }
+
 };
 
 init();
 
 </script>
+
+</body>
+</html>
