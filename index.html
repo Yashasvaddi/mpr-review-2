@@ -1,19 +1,9 @@
-<!DOCTYPE html>
-<html>
-<body>
-
-<h2>Browser LLM (WebGPU)</h2>
-
-<input id="text" value="Explain machine learning">
-<button onclick="run()">Generate</button>
-
-<pre id="output"></pre>
-
 <script type="module">
 
 import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 
 let engine;
+let ready = false;
 
 async function init() {
 
@@ -23,13 +13,20 @@ async function init() {
 
   await engine.reload("Qwen2-0.5B-Instruct-q4f16_1-MLC");
 
+  ready = true;
+
   document.getElementById("output").innerText = "Model ready";
 }
 
 window.run = async function () {
 
-  const prompt = document.getElementById("text").value;
+  if (!ready) {
+    document.getElementById("output").innerText = "Model still loading...";
+    return;
+  }
 
+  const prompt = document.getElementById("text").value;
+  console.log("Prompt:", prompt);
   const reply = await engine.chat.completions.create({
     messages: [{ role: "user", content: prompt }],
     temperature: 0.7
@@ -42,6 +39,3 @@ window.run = async function () {
 init();
 
 </script>
-
-</body>
-</html>
