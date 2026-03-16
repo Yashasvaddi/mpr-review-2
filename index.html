@@ -1,239 +1,640 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="en">
 <head>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Chat • Universal Document Q&A</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            padding: 15px 20px;
+            background: #2d2d2d;
+            border-bottom: 1px solid #404040;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .file-input {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .file-label {
+            background: #3b82f6;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            border: none;
+        }
+        .file-label:hover {
+            background: #2563eb;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover:not(:disabled) {
+            background: #2563eb;
+        }
+        button:disabled {
+            background: #4a5568;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        .status {
+            color: #9ca3af;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #3b82f6;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            display: none;
+        }
+        .spinner.active {
+            display: inline-block;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .stats {
+            display: flex;
+            gap: 15px;
+            font-size: 13px;
+            color: #9ca3af;
+        }
+        .main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        .chat-section {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #404040;
+        }
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .message {
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .user {
+            background: #3b82f6;
+            color: white;
+            align-self: flex-end;
+        }
+        .assistant {
+            background: #2d2d2d;
+            color: #e0e0e0;
+            align-self: flex-start;
+            border: 1px solid #404040;
+        }
+        .input-area {
+            padding: 20px;
+            border-top: 1px solid #404040;
+            display: flex;
+            gap: 10px;
+        }
+        .input-area input {
+            flex: 1;
+            background: #2d2d2d;
+            border: 1px solid #404040;
+            border-radius: 6px;
+            padding: 10px;
+            color: white;
+            outline: none;
+        }
+        .input-area input:focus {
+            border-color: #3b82f6;
+        }
+        .sources-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #222;
+        }
+        .sources-header {
+            padding: 15px;
+            background: #2d2d2d;
+            border-bottom: 1px solid #404040;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .chunks-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        .chunk-item {
+            background: #2d2d2d;
+            border: 1px solid #404040;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 8px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .chunk-item:hover {
+            border-color: #3b82f6;
+        }
+        .chunk-item.active {
+            border-color: #3b82f6;
+            background: #2d3a4a;
+        }
+        .chunk-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            color: #9ca3af;
+        }
+        .chunk-score {
+            color: #3b82f6;
+            font-weight: 600;
+        }
+        .chunk-preview {
+            color: #d1d5db;
+            line-height: 1.4;
+            max-height: 60px;
+            overflow: hidden;
+            position: relative;
+        }
+        .chunk-preview::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            left: 0;
+            height: 20px;
+            background: linear-gradient(transparent, #2d2d2d);
+        }
+        .progress-bar {
+            height: 2px;
+            background: #404040;
+            margin: 10px 0;
+            border-radius: 1px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #3b82f6;
+            width: 0%;
+            transition: width 0.3s;
+        }
+    </style>
 </head>
-
 <body>
-
-<center>
-
-<h2>Browser RAG Demo (WebGPU)</h2>
-
-<p>Upload a document:</p>
-
-<input type="file" id="file">
-<button onclick="processFile()">Load Document</button>
-
-<br><br>
-
-<p>Ask a question:</p>
-
-<input id="text" size="60" value="Explain machine learning">
-<br><br>
-
-<button onclick="run()">Generate Answer</button>
-
-<br><br>
-
-<pre id="output">Initializing...</pre>
-
-<h3>Document Chunks</h3>
-<div id="chunks" style="width:80%;text-align:left;"></div>
-
-</center>
-
-<script type="module">
-
-import * as webllm from "https://esm.run/@mlc-ai/web-llm";
-
-let engine;
-let ready = false;
-let chunks = [];
-
-async function init() {
-
-  const output = document.getElementById("output");
-
-  try {
-
-    output.innerText = "Loading model...";
-
-    engine = new webllm.MLCEngine();
-
-    await engine.reload("Llama-3.2-1B-Instruct-q4f16_1-MLC");
-
-    ready = true;
-
-    output.innerText = "Model ready. Upload a document.";
-
-  } catch (err) {
-
-    output.innerText = err.message;
-
-  }
-
-}
-
-function renderChunks(highlight = []) {
-
-  const container = document.getElementById("chunks");
-  container.innerHTML = "";
-
-  chunks.forEach((c, i) => {
-
-    const div = document.createElement("div");
-
-    div.style.border = "1px solid #ccc";
-    div.style.padding = "10px";
-    div.style.marginBottom = "8px";
-    div.style.background = highlight.includes(i) ? "#ffeeba" : "#f7f7f7";
-
-    div.innerHTML = "<b>Chunk " + i + "</b><br>" + c;
-
-    container.appendChild(div);
-
-  });
-
-}
-
-async function extractPDF(file) {
-
-  const buffer = await file.arrayBuffer();
-
-  const pdf = await pdfjsLib.getDocument({data: buffer}).promise;
-
-  let text = "";
-
-  for (let i = 1; i <= pdf.numPages; i++) {
-
-    const page = await pdf.getPage(i);
-
-    const content = await page.getTextContent();
-
-    const strings = content.items.map(item => item.str);
-
-    text += strings.join(" ") + "\n";
-
-  }
-
-  return text;
-
-}
-
-window.processFile = async function () {
-
-  const file = document.getElementById("file").files[0];
-
-  if (!file) {
-    alert("Upload a file");
-    return;
-  }
-
-  let text = "";
-
-  if (file.type === "application/pdf") {
-
-    document.getElementById("output").innerText = "Parsing PDF...";
-
-    text = await extractPDF(file);
-
-  } else {
-
-    text = await file.text();
-
-  }
-
-  const size = 500;
-  const overlap = 100;
-
-  chunks = [];
-
-  for (let i = 0; i < text.length; i += size - overlap) {
-
-    chunks.push(text.slice(i, i + size));
-
-  }
-
-  document.getElementById("output").innerText =
-    "Document loaded. Chunks: " + chunks.length;
-
-  renderChunks();
-
-}
-
-function retrieve(query, k = 3) {
-
-  const words = query.toLowerCase().split(" ");
-
-  const scored = chunks.map((c, index) => {
-
-    const text = c.toLowerCase();
-
-    let score = 0;
-
-    words.forEach(w => {
-
-      if (text.includes(w)) score++;
-
-    });
-
-    return {chunk: c, score, index};
-
-  });
-
-  scored.sort((a,b)=>b.score-a.score);
-
-  const results = scored.slice(0,k);
-
-  return {
-
-    chunks: results.map(x=>x.chunk),
-    indexes: results.map(x=>x.index)
-
-  };
-
-}
-
-window.run = async function () {
-
-  const output = document.getElementById("output");
-
-  if (!ready) {
-    output.innerText = "Model still loading...";
-    return;
-  }
-
-  if (chunks.length === 0) {
-    output.innerText = "Upload a document first.";
-    return;
-  }
-
-  const prompt = document.getElementById("text").value;
-
-  const retrieval = retrieve(prompt,3);
-
-  renderChunks(retrieval.indexes);
-
-  const context = retrieval.chunks.join("\n\n");
-
-  const ragPrompt =
-
-`Answer using the context below.
+    <div class="header">
+        <div class="file-input">
+            <label for="fileInput" class="file-label">📄 Choose File</label>
+            <input type="file" id="fileInput" accept=".txt,.pdf,.md,.json,.csv">
+            <button onclick="loadDocument()" id="loadBtn">Load Document</button>
+            <button onclick="clearDocument()" id="clearBtn" style="background: #6b7280;">Clear</button>
+        </div>
+        <div class="status">
+            <span class="spinner" id="spinner"></span>
+            <span id="status">Initializing models...</span>
+        </div>
+        <div class="stats" id="stats" style="display: none;">
+            <span id="chunkCount">Chunks: 0</span>
+            <span id="docSize">Size: 0 KB</span>
+        </div>
+    </div>
+
+    <div class="main">
+        <div class="chat-section">
+            <div class="messages" id="messages">
+                <div class="message assistant">👋 Upload a document and ask me anything about it!</div>
+            </div>
+            <div class="input-area">
+                <input type="text" id="question" placeholder="Ask a question..." value="What is this document about?">
+                <button onclick="askQuestion()" id="askBtn" disabled>Send</button>
+            </div>
+        </div>
+
+        <div class="sources-section">
+            <div class="sources-header">
+                📚 Retrieved Sources <span id="sourceCount" style="color: #9ca3af; margin-left: 8px;"></span>
+            </div>
+            <div class="chunks-list" id="chunks"></div>
+        </div>
+    </div>
+
+    <!-- Progress overlay (hidden by default) -->
+    <div id="progress" style="display: none; padding: 10px 20px; background: #2d2d2d; border-top: 1px solid #404040;">
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <div style="font-size: 12px; color: #9ca3af; margin-top: 5px;" id="progressText">Processing...</div>
+    </div>
+
+    <script type="module">
+        import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+        import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";
+
+        // ========== State ==========
+        const state = {
+            llm: null,
+            embedder: null,
+            ready: false,
+            processing: false,
+            chunks: [],
+            embeddings: [],
+            currentResults: []
+        };
+
+        // ========== DOM Elements ==========
+        const elements = {
+            fileInput: document.getElementById('fileInput'),
+            loadBtn: document.getElementById('loadBtn'),
+            clearBtn: document.getElementById('clearBtn'),
+            askBtn: document.getElementById('askBtn'),
+            status: document.getElementById('status'),
+            spinner: document.getElementById('spinner'),
+            stats: document.getElementById('stats'),
+            chunkCount: document.getElementById('chunkCount'),
+            docSize: document.getElementById('docSize'),
+            messages: document.getElementById('messages'),
+            question: document.getElementById('question'),
+            chunks: document.getElementById('chunks'),
+            sourceCount: document.getElementById('sourceCount'),
+            progress: document.getElementById('progress'),
+            progressFill: document.getElementById('progressFill'),
+            progressText: document.getElementById('progressText')
+        };
+
+        // ========== Utilities ==========
+        function updateStatus(msg, showSpinner = true) {
+            elements.status.textContent = msg;
+            elements.spinner.classList.toggle('active', showSpinner);
+        }
+
+        function updateProgress(current, total, msg) {
+            const percent = (current / total) * 100;
+            elements.progressFill.style.width = `${percent}%`;
+            elements.progressText.textContent = msg || `Processing ${current}/${total}`;
+            elements.progress.style.display = 'block';
+        }
+
+        function hideProgress() {
+            elements.progress.style.display = 'none';
+        }
+
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / 1048576).toFixed(1) + ' MB';
+        }
+
+        function addMessage(content, role) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${role}`;
+            msgDiv.textContent = content;
+            elements.messages.appendChild(msgDiv);
+            elements.messages.scrollTop = elements.messages.scrollHeight;
+        }
+
+        // ========== Text Processing ==========
+        function chunkText(text, maxSize = 500, overlap = 100) {
+            // Clean text
+            const clean = text.replace(/\s+/g, ' ').trim();
+            if (clean.length <= maxSize) return [clean];
+
+            // Try to split by paragraphs first
+            const paragraphs = clean.split(/\n\s*\n/);
+            if (paragraphs.length > 1) {
+                const chunks = [];
+                let current = [];
+                let currentLen = 0;
+
+                for (const para of paragraphs) {
+                    if (currentLen + para.length > maxSize && current.length > 0) {
+                        chunks.push(current.join('\n\n'));
+                        // Keep last paragraph for overlap if it makes sense
+                        current = [para];
+                        currentLen = para.length;
+                    } else {
+                        current.push(para);
+                        currentLen += para.length;
+                    }
+                }
+                if (current.length > 0) chunks.push(current.join('\n\n'));
+                return chunks;
+            }
+
+            // Fallback to sentence splitting
+            const sentences = clean.split(/(?<=[.!?])\s+/);
+            const chunks = [];
+            let current = [];
+            let currentLen = 0;
+
+            for (const sent of sentences) {
+                if (currentLen + sent.length > maxSize && current.length > 0) {
+                    chunks.push(current.join(' '));
+                    // Overlap: keep last few sentences
+                    const overlapSents = [];
+                    let overlapLen = 0;
+                    for (let i = current.length - 1; i >= 0; i--) {
+                        if (overlapLen + current[i].length > overlap) break;
+                        overlapSents.unshift(current[i]);
+                        overlapLen += current[i].length;
+                    }
+                    current = overlapSents;
+                    currentLen = overlapLen;
+                }
+                current.push(sent);
+                currentLen += sent.length;
+            }
+            if (current.length > 0) chunks.push(current.join(' '));
+
+            return chunks;
+        }
+
+        async function extractPDF(file) {
+            const data = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data }).promise;
+            let text = '';
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const content = await page.getTextContent();
+                text += content.items.map(item => item.str).join(' ') + '\n';
+                updateStatus(`Reading PDF: page ${i}/${pdf.numPages}`);
+            }
+            return text;
+        }
+
+        // ========== Embedding & Search ==========
+        function cosineSimilarity(a, b) {
+            let dot = 0, normA = 0, normB = 0;
+            for (let i = 0; i < a.length; i++) {
+                dot += a[i] * b[i];
+                normA += a[i] * a[i];
+                normB += b[i] * b[i];
+            }
+            return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+        }
+
+        async function findSimilar(query, topK = 3) {
+            if (!state.embedder || state.embeddings.length === 0) return [];
+
+            const qEmb = await state.embedder(query, { pooling: 'mean', normalize: true });
+            const qVec = qEmb.data;
+
+            const scores = state.embeddings.map((emb, i) => ({
+                index: i,
+                chunk: state.chunks[i],
+                score: cosineSimilarity(qVec, emb)
+            }));
+
+            scores.sort((a, b) => b.score - a.score);
+            return scores.slice(0, topK);
+        }
+
+        // ========== Main Functions ==========
+        async function init() {
+            try {
+                updateStatus('Loading LLM...');
+                state.llm = new webllm.MLCEngine();
+                await state.llm.reload('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+
+                updateStatus('Loading embedding model...');
+                state.embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+
+                state.ready = true;
+                updateStatus('✅ Ready. Upload a document.', false);
+            } catch (err) {
+                updateStatus(`❌ Error: ${err.message}`, false);
+                console.error(err);
+            }
+        }
+
+        window.loadDocument = async function() {
+            if (state.processing) return;
+
+            const file = elements.fileInput.files[0];
+            if (!file) {
+                alert('Select a file first');
+                return;
+            }
+
+            state.processing = true;
+            elements.loadBtn.disabled = true;
+            elements.askBtn.disabled = true;
+
+            try {
+                // Extract text
+                updateStatus(`Reading ${file.name}...`);
+                let text = '';
+                if (file.type === 'application/pdf') {
+                    text = await extractPDF(file);
+                } else {
+                    text = await file.text();
+                }
+
+                // Chunk
+                updateStatus('Creating chunks...');
+                state.chunks = chunkText(text);
+
+                // Update stats
+                elements.stats.style.display = 'flex';
+                elements.chunkCount.textContent = `Chunks: ${state.chunks.length}`;
+                elements.docSize.textContent = `Size: ${formatSize(file.size)}`;
+
+                // Generate embeddings
+                state.embeddings = [];
+                for (let i = 0; i < state.chunks.length; i++) {
+                    updateProgress(i + 1, state.chunks.length, `Embedding chunk ${i + 1}/${state.chunks.length}`);
+                    
+                    const emb = await state.embedder(state.chunks[i], {
+                        pooling: 'mean',
+                        normalize: true
+                    });
+                    state.embeddings.push(emb.data);
+                }
+
+                hideProgress();
+                renderChunks([]);
+                
+                elements.askBtn.disabled = false;
+                updateStatus(`✅ Loaded ${state.chunks.length} chunks`, false);
+                
+                addMessage(`📄 Loaded "${file.name}" with ${state.chunks.length} sections. Ask me anything about it!`, 'assistant');
+                
+            } catch (err) {
+                updateStatus(`❌ Error: ${err.message}`, false);
+                console.error(err);
+            } finally {
+                state.processing = false;
+                elements.loadBtn.disabled = false;
+            }
+        };
+
+        window.askQuestion = async function() {
+            if (!state.ready || state.chunks.length === 0 || state.processing) {
+                if (state.chunks.length === 0) alert('Load a document first');
+                return;
+            }
+
+            const question = elements.question.value.trim();
+            if (!question) return;
+
+            state.processing = true;
+            elements.askBtn.disabled = true;
+
+            // Add user message
+            addMessage(question, 'user');
+
+            try {
+                updateStatus('🔍 Searching...');
+
+                // Find relevant chunks
+                const relevant = await findSimilar(question, 5);
+                state.currentResults = relevant;
+
+                // Render sources
+                renderChunks(relevant.map(r => r.index));
+
+                // Prepare context
+                const context = relevant.map(r => r.chunk).join('\n\n---\n\n');
+
+                updateStatus('🤔 Generating...');
+
+                const prompt = `Based on the following context, answer the question.
 
 Context:
 ${context}
 
-Question:
-${prompt}`;
+Question: ${question}
 
-  const reply = await engine.chat.completions.create({
+Answer:`;
 
-    messages: [{ role: "user", content: ragPrompt }],
-    temperature: 0.7
+                const reply = await state.llm.chat.completions.create({
+                    messages: [{ role: 'user', content: prompt }],
+                    temperature: 0.7,
+                    max_tokens: 500
+                });
 
-  });
+                const answer = reply.choices[0].message.content;
+                addMessage(answer, 'assistant');
 
-  output.innerText = reply.choices[0].message.content;
+                updateStatus('✅ Done', false);
 
-}
+            } catch (err) {
+                updateStatus(`❌ Error: ${err.message}`, false);
+                addMessage(`Sorry, error: ${err.message}`, 'assistant');
+                console.error(err);
+            } finally {
+                state.processing = false;
+                elements.askBtn.disabled = false;
+            }
+        };
 
-init();
+        window.clearDocument = function() {
+            state.chunks = [];
+            state.embeddings = [];
+            state.currentResults = [];
+            state.processing = false;
+            
+            elements.fileInput.value = '';
+            elements.stats.style.display = 'none';
+            elements.chunks.innerHTML = '<div style="color: #666; padding: 10px;">No chunks loaded</div>';
+            elements.messages.innerHTML = '<div class="message assistant">👋 Upload a document and ask me anything about it!</div>';
+            elements.sourceCount.textContent = '';
+            elements.askBtn.disabled = true;
+            
+            updateStatus('✅ Cleared. Ready for new document.', false);
+        };
 
-</script>
+        function renderChunks(highlighted = []) {
+            if (state.chunks.length === 0) {
+                elements.chunks.innerHTML = '<div style="color: #666; padding: 10px;">No chunks loaded</div>';
+                elements.sourceCount.textContent = '';
+                return;
+            }
 
+            let html = '';
+            const toShow = state.currentResults.length > 0 ? state.currentResults : 
+                          state.chunks.slice(0, 5).map((c, i) => ({ index: i, chunk: c, score: 0 }));
+
+            elements.sourceCount.textContent = `(${toShow.length} sources)`;
+
+            toShow.forEach(item => {
+                const isActive = highlighted.includes(item.index);
+                const score = item.score ? item.score.toFixed(2) : '';
+                
+                html += `
+                    <div class="chunk-item ${isActive ? 'active' : ''}" 
+                         onclick="console.log(${JSON.stringify(item.chunk)})">
+                        <div class="chunk-header">
+                            <span>Chunk ${item.index + 1}</span>
+                            ${score ? `<span class="chunk-score">${score}</span>` : ''}
+                        </div>
+                        <div class="chunk-preview">
+                            ${item.chunk.substring(0, 150)}${item.chunk.length > 150 ? '...' : ''}
+                        </div>
+                    </div>
+                `;
+            });
+
+            elements.chunks.innerHTML = html;
+        }
+
+        // File input handler
+        elements.fileInput.addEventListener('change', (e) => {
+            if (e.target.files[0]) {
+                elements.docSize.textContent = `Size: ${formatSize(e.target.files[0].size)}`;
+            }
+        });
+
+        // Enter key handler
+        elements.question.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !elements.askBtn.disabled) {
+                askQuestion();
+            }
+        });
+
+        // Initialize
+        init();
+    </script>
 </body>
 </html>
